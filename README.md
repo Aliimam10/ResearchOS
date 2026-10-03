@@ -77,3 +77,4 @@ Git. This makes it safe to experiment without committing research material.
   index will be rebuilt locally from it.
 - Full text is optional and clearly marked. Abstract-only evidence is useful for
   discovery questions but should yield lower confidence in later verification.
+# ResearchOS
