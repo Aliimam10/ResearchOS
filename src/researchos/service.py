@@ -7,6 +7,7 @@ from .config import CORPUS_DIR, DOWNLOAD_DIR
 from .discovery import OpenAlexClient, TopicDiscovery
 from .ingestion import PDFIngestor
 from .models import DiscoveryResult, DocumentRecord, IngestResult
+from .retrieval import HybridRetriever, RetrievalFilters, RetrievalHit
 from .storage import CorpusStore
 
 
@@ -46,3 +47,9 @@ class ResearchService:
 
     def corpus_summary(self) -> dict[str, int]:
         return self.store.counts()
+
+    def search(
+        self, question: str, *, filters: RetrievalFilters | None = None, limit: int = 8
+    ) -> list[RetrievalHit]:
+        """Use hybrid retrieval over the current corpus with all citation metadata intact."""
+        return HybridRetriever(self.store).search(question, filters=filters, limit=limit)

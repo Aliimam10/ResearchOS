@@ -6,6 +6,7 @@ import json
 from dataclasses import asdict
 from pathlib import Path
 
+from .retrieval import RetrievalFilters
 from .service import ResearchService
 
 
@@ -21,6 +22,12 @@ def main() -> None:
     discover.add_argument("--limit", type=int, default=50)
     discover.add_argument("--year-from", type=int)
     discover.add_argument("--metadata-only", action="store_true", help="do not download OA PDFs")
+
+    search = subcommands.add_parser("search", help="run hybrid retrieval over the local corpus")
+    search.add_argument("question")
+    search.add_argument("--limit", type=int, default=5)
+    search.add_argument("--year-from", type=int)
+    search.add_argument("--year-to", type=int)
 
     subcommands.add_parser("status", help="show the local corpus counts")
     args = parser.parse_args()
@@ -40,6 +47,13 @@ def main() -> None:
             download_full_text=not args.metadata_only,
         )
         print(json.dumps(asdict(result), indent=2))
+    elif args.command == "search":
+        hits = service.search(
+            args.question,
+            limit=args.limit,
+            filters=RetrievalFilters(year_from=args.year_from, year_to=args.year_to),
+        )
+        print(json.dumps([hit.to_dict() for hit in hits], indent=2))
     else:
         print(json.dumps(service.corpus_summary(), indent=2))
 

@@ -25,6 +25,8 @@ document record + source metadata
 page/section-aware citable chunks
                 ↓
 local JSON corpus (inspectable and portable)
+                ↓
+semantic vectors + BM25 → Reciprocal Rank Fusion → lightweight reranking
 ```
 
 Each chunk carries its document title, source identifier/URL, authors, year,
@@ -46,6 +48,9 @@ python -m researchos upload ~/Downloads/paper.pdf
 
 # Retrieve up to 50 OpenAlex candidates, and OA PDFs where offered
 python -m researchos discover "Machine learning approaches to gravitational-wave detection" --year-from 2020
+
+# Hybrid search preserves document/page/section citation metadata
+python -m researchos search "Which methods improve detection accuracy?" --year-from 2020
 
 python -m researchos status
 pytest
@@ -73,8 +78,15 @@ Git. This makes it safe to experiment without committing research material.
 - Chunks never cross pages, so a page citation is never fabricated. Section
   labels are best-effort because PDF structure is inconsistent.
 - JSON storage is intentional for a small portfolio corpus: it is transparent,
-  versionable in schema, and has no infrastructure dependency. The retrieval
-  index will be rebuilt locally from it.
+  versionable in schema, and has no infrastructure dependency. The in-process
+  NumPy/BM25 index is rebuilt when the local corpus changes. That is a sound
+  trade-off for hundreds or low thousands of chunks; FAISS is a natural swap for
+  a genuinely large local corpus.
+- Hybrid retrieval uses cosine similarity from `sentence-transformers` when a
+  model is available and transparently falls back to a labelled hashing-vector
+  encoder when offline. It combines semantic and BM25 ranks with Reciprocal Rank
+  Fusion, then applies a small deterministic term-coverage reranker. Scores are
+  retrieval signals, not evidence-quality claims.
 - Full text is optional and clearly marked. Abstract-only evidence is useful for
   discovery questions but should yield lower confidence in later verification.
 # ResearchOS
