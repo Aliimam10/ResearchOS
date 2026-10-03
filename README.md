@@ -52,6 +52,9 @@ python -m researchos discover "Machine learning approaches to gravitational-wave
 # Hybrid search preserves document/page/section citation metadata
 python -m researchos search "Which methods improve detection accuracy?" --year-from 2020
 
+# Ask a corpus question; the trace contains high-level tool actions only
+python -m researchos ask "What is the average improvement reported?"
+
 python -m researchos status
 pytest
 ```
@@ -65,7 +68,10 @@ Git. This makes it safe to experiment without committing research material.
 2. **Hybrid retrieval** — embeddings, BM25, metadata filters, RRF, and a small
    reranker.
 3. **Research workflow** — LangGraph state orchestration plus bounded retriever,
-   calculator, and paper-search tools.
+   calculator, and paper-search tools. It makes at most two retrieval attempts,
+   uses deterministic arithmetic only on retrieved values, and returns an
+   explicit insufficient-evidence response where appropriate. Its trace is an
+   operational summary, not hidden reasoning.
 4. **Groundedness and evaluation** — claim/evidence verification and a manually
    checked benchmark comparing semantic, BM25, and hybrid retrieval.
 5. **Local product surface** — FastAPI, a focused evidence UI, API tests, and

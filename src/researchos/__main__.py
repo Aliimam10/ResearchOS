@@ -29,6 +29,11 @@ def main() -> None:
     search.add_argument("--year-from", type=int)
     search.add_argument("--year-to", type=int)
 
+    ask = subcommands.add_parser("ask", help="run the evidence-first research workflow")
+    ask.add_argument("question")
+    ask.add_argument("--year-from", type=int)
+    ask.add_argument("--year-to", type=int)
+
     subcommands.add_parser("status", help="show the local corpus counts")
     args = parser.parse_args()
     service = ResearchService()
@@ -54,6 +59,11 @@ def main() -> None:
             filters=RetrievalFilters(year_from=args.year_from, year_to=args.year_to),
         )
         print(json.dumps([hit.to_dict() for hit in hits], indent=2))
+    elif args.command == "ask":
+        result = service.ask(args.question, filters={"year_from": args.year_from, "year_to": args.year_to})
+        print(result.answer)
+        print("\nResearch trace:")
+        print(" → ".join(result.trace))
     else:
         print(json.dumps(service.corpus_summary(), indent=2))
 

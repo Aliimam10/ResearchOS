@@ -9,6 +9,8 @@ from .ingestion import PDFIngestor
 from .models import DiscoveryResult, DocumentRecord, IngestResult
 from .retrieval import HybridRetriever, RetrievalFilters, RetrievalHit
 from .storage import CorpusStore
+from .tools import ResearchRetriever
+from .workflow import ResearchWorkflow, WorkflowResult
 
 
 class ResearchService:
@@ -53,3 +55,8 @@ class ResearchService:
     ) -> list[RetrievalHit]:
         """Use hybrid retrieval over the current corpus with all citation metadata intact."""
         return HybridRetriever(self.store).search(question, filters=filters, limit=limit)
+
+    def ask(self, question: str, *, filters: dict | None = None) -> WorkflowResult:
+        """Run the bounded LangGraph research workflow over the local corpus."""
+        retriever = ResearchRetriever(HybridRetriever(self.store))
+        return ResearchWorkflow(retriever).ask(question, filters=filters)
