@@ -9,6 +9,7 @@ DATA_DIR = Path(os.getenv("RESEARCHOS_DATA_DIR", ROOT / "data"))
 CORPUS_DIR = DATA_DIR / "corpus"
 DOWNLOAD_DIR = DATA_DIR / "downloads"
 REPORT_DIR = DATA_DIR / "reports"
+EVALUATION_DIR = ROOT / "evaluation"
 
 OPENALEX_WORKS_URL = "https://api.openalex.org/works"
 DEFAULT_DISCOVERY_LIMIT = 50

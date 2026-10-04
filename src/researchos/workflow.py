@@ -5,7 +5,9 @@ import re
 from dataclasses import dataclass
 from typing import Any, TypedDict
 
+from .citations import citation_from_evidence
 from .tools import CalculatorTool, ResearchRetriever
+from .verification import ClaimEvidenceVerifier
 
 try:  # Keep local tests usable before optional LangGraph has been installed.
     from langgraph.graph import END, StateGraph
@@ -31,6 +33,7 @@ class ResearchState(TypedDict, total=False):
     evidence_quality: str
     tool_results: list[dict[str, Any]]
     candidate_claims: list[dict[str, Any]]
+    verified_claims: list[dict[str, Any]]
     citations: list[dict[str, Any]]
     answer: str
     trace: list[str]
@@ -44,6 +47,7 @@ class WorkflowResult:
     evidence: list[dict[str, Any]]
     tool_results: list[dict[str, Any]]
     candidate_claims: list[dict[str, Any]]
+    verified_claims: list[dict[str, Any]]
     trace: list[str]
 
 
@@ -71,9 +75,15 @@ class ResearchWorkflow:
     separate later milestone rather than a claim that this stage guarantees truth.
     """
 
-    def __init__(self, retriever: ResearchRetriever, calculator: CalculatorTool | None = None) -> None:
+    def __init__(
+        self,
+        retriever: ResearchRetriever,
+        calculator: CalculatorTool | None = None,
+        verifier: ClaimEvidenceVerifier | None = None,
+    ) -> None:
         self.retriever = retriever
         self.calculator = calculator or CalculatorTool()
+        self.verifier = verifier or ClaimEvidenceVerifier()
         self.graph = self._build_graph() if LANGGRAPH_AVAILABLE else None
 
     def ask(self, question: str, *, filters: dict[str, Any] | None = None) -> WorkflowResult:
@@ -86,6 +96,7 @@ class ResearchWorkflow:
             "evidence": [],
             "tool_results": [],
             "candidate_claims": [],
+            "verified_claims": [],
             "citations": [],
             "trace": [],
         }
@@ -97,6 +108,7 @@ class ResearchWorkflow:
             evidence=state.get("evidence", []),
             tool_results=state.get("tool_results", []),
             candidate_claims=state.get("candidate_claims", []),
+            verified_claims=state.get("verified_claims", []),
             trace=state.get("trace", []),
         )
 
@@ -110,6 +122,8 @@ class ResearchWorkflow:
         graph.add_node("reformulate", self.reformulate)
         graph.add_node("calculate", self.calculate)
         graph.add_node("draft", self.draft)
+        graph.add_node("verify", self.verify)
+        graph.add_node("finalise", self.finalise)
         graph.add_node("insufficient", self.insufficient)
         graph.set_entry_point("analyse")
         graph.add_edge("analyse", "plan")
@@ -127,7 +141,11 @@ class ResearchWorkflow:
         )
         graph.add_edge("reformulate", "retrieve")
         graph.add_edge("calculate", "draft")
-        graph.add_edge("draft", END)
+        graph.add_edge("draft", "verify")
+        graph.add_conditional_edges(
+            "verify", self.next_after_verification, {"finalise": "finalise", "insufficient": "insufficient"}
+        )
+        graph.add_edge("finalise", END)
         graph.add_edge("insufficient", END)
         return graph.compile()
 
@@ -233,8 +251,32 @@ class ResearchWorkflow:
                     "citation_id": number,
                 }
             )
-            citations.append(self._citation(item, number))
-        lines = [f"- {claim['text']} [{claim['citation_id']}]" for claim in claims]
+            citations.append(citation_from_evidence(item, number).to_dict())
+        return {
+            "candidate_claims": claims,
+            "citations": citations,
+            "trace": _traced(state, f"Drafted {len(claims)} source-bound claim{'s' if len(claims) != 1 else ''}"),
+        }
+
+    def verify(self, state: ResearchState) -> dict[str, Any]:
+        outcomes = self.verifier.verify(state["candidate_claims"], state["evidence"], state["citations"])
+        verified = [outcome.to_dict() for outcome in outcomes]
+        supported = sum(item["supported"] for item in verified)
+        return {
+            "verified_claims": verified,
+            "trace": _traced(state, f"Verified {supported}/{len(verified)} candidate claim{'s' if len(verified) != 1 else ''}"),
+        }
+
+    @staticmethod
+    def next_after_verification(state: ResearchState) -> str:
+        return "finalise" if any(item["supported"] for item in state["verified_claims"]) else "insufficient"
+
+    def finalise(self, state: ResearchState) -> dict[str, Any]:
+        """Remove unsupported claims instead of presenting an ungrounded answer."""
+        supported = [claim for claim in state["verified_claims"] if claim["supported"]]
+        citation_ids = {claim["citation_id"] for claim in supported}
+        citations = [citation for citation in state["citations"] if citation["id"] in citation_ids]
+        lines = [f"- {claim['text']} [{claim['citation_id']}]" for claim in supported]
         for result in state["tool_results"]:
             if result["status"] == "ok":
                 inputs = ", ".join(f"{value:g}%" for value in result["values"])
@@ -250,10 +292,9 @@ class ResearchWorkflow:
             "Limited": "This answer relies on abstract-level evidence and should be treated as preliminary.",
         }[state["evidence_quality"]]
         return {
-            "candidate_claims": claims,
             "citations": citations,
             "answer": f"{opening}\n\n" + "\n".join(lines),
-            "trace": _traced(state, f"Drafted {len(claims)} source-bound claim{'s' if len(claims) != 1 else ''}"),
+            "trace": _traced(state, f"Finalised {len(supported)} verified claim{'s' if len(supported) != 1 else ''}"),
         }
 
     def insufficient(self, state: ResearchState) -> dict[str, Any]:
@@ -278,21 +319,6 @@ class ResearchWorkflow:
         keyword_set = set(keywords)
         return max(candidates, key=lambda sentence: len(keyword_set & set(_keywords(sentence))))
 
-    @staticmethod
-    def _citation(item: dict[str, Any], number: int) -> dict[str, Any]:
-        location = f"p. {item['page']}" if item.get("page") else "Abstract"
-        if item.get("section") and item["section"] != "Abstract":
-            location = f"{location}, {item['section']}"
-        return {
-            "id": number,
-            "document_id": item["document_id"],
-            "title": item["title"],
-            "location": location,
-            "source_url": item.get("source_url"),
-            "doi": item.get("doi"),
-            "content_kind": item["content_kind"],
-        }
-
     def _run_fallback(self, state: ResearchState) -> ResearchState:
         """Mirror the same bounded graph for minimal/offline test environments."""
         state = {**state, **self.analyse(state)}
@@ -311,4 +337,8 @@ class ResearchWorkflow:
                 state = {**state, **self.draft(state)}
             else:
                 state = {**state, **self.insufficient(state)}
-            return state
+                return state
+            state = {**state, **self.verify(state)}
+            if self.next_after_verification(state) == "finalise":
+                return {**state, **self.finalise(state)}
+            return {**state, **self.insufficient(state)}

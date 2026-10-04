@@ -55,9 +55,29 @@ python -m researchos search "Which methods improve detection accuracy?" --year-f
 # Ask a corpus question; the trace contains high-level tool actions only
 python -m researchos ask "What is the average improvement reported?"
 
+# Write a reproducible retrieval and groundedness report from the fixed corpus
+python -m researchos evaluate
+
 python -m researchos status
 pytest
 ```
+
+## Local interface
+
+The interface is a plain HTML/CSS/JavaScript page served by FastAPI, so there is
+no Node build step or hidden frontend state. Start it with:
+
+```bash
+uvicorn app:server --reload --port 7860
+```
+
+Open `http://127.0.0.1:7860`. The **Corpus** view uploads PDFs or creates a
+topic corpus from OpenAlex; **Research** sends a scoped question and optional
+year/document filters to the workflow; **Evaluation** runs the isolated fixed
+benchmark and renders the stored report. The browser communicates only with the
+following local endpoints: `GET /api/corpus`, `POST /api/upload`,
+`POST /api/discover`, `POST /api/ask`, `GET /api/evaluation`, and
+`POST /api/evaluation/run`.
 
 Generated corpus JSON and downloaded PDFs stay under `data/` and are ignored by
 Git. This makes it safe to experiment without committing research material.
@@ -72,6 +92,12 @@ Git. This makes it safe to experiment without committing research material.
    uses deterministic arithmetic only on retrieved values, and returns an
    explicit insufficient-evidence response where appropriate. Its trace is an
    operational summary, not hidden reasoning.
+4. **Groundedness and evaluation** — a claim verifier checks that each displayed
+   claim has a matching retrieved chunk and citation. Unsupported claims are
+   removed. `evaluation/` contains a fixed 12-passage corpus and 50 manually
+   checked question-to-chunk labels; `researchos evaluate` reports Recall@5,
+   MRR@5, nDCG@5, citation correctness, claim groundedness, unsupported-claim
+   rate, and latency for semantic, BM25, and hybrid retrieval.
 4. **Groundedness and evaluation** — claim/evidence verification and a manually
    checked benchmark comparing semantic, BM25, and hybrid retrieval.
 5. **Local product surface** — FastAPI, a focused evidence UI, API tests, and
@@ -93,6 +119,9 @@ Git. This makes it safe to experiment without committing research material.
   encoder when offline. It combines semantic and BM25 ranks with Reciprocal Rank
   Fusion, then applies a small deterministic term-coverage reranker. Scores are
   retrieval signals, not evidence-quality claims.
+- Verification is deliberately narrow: it checks whether ResearchOS has linked
+  displayed text to the cited retrieved passage. It does not guarantee that the
+  source itself is correct, representative, or applicable beyond its context.
 - Full text is optional and clearly marked. Abstract-only evidence is useful for
   discovery questions but should yield lower confidence in later verification.
 # ResearchOS

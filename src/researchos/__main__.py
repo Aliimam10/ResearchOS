@@ -8,6 +8,7 @@ from pathlib import Path
 
 from .retrieval import RetrievalFilters
 from .service import ResearchService
+from .evaluation import run_fixed_benchmark
 
 
 def main() -> None:
@@ -33,6 +34,9 @@ def main() -> None:
     ask.add_argument("question")
     ask.add_argument("--year-from", type=int)
     ask.add_argument("--year-to", type=int)
+
+    evaluate = subcommands.add_parser("evaluate", help="run the fixed 50-question benchmark")
+    evaluate.add_argument("--report", type=Path, help="optional output path for the JSON report")
 
     subcommands.add_parser("status", help="show the local corpus counts")
     args = parser.parse_args()
@@ -64,6 +68,9 @@ def main() -> None:
         print(result.answer)
         print("\nResearch trace:")
         print(" → ".join(result.trace))
+    elif args.command == "evaluate":
+        kwargs = {"report_path": args.report} if args.report else {}
+        print(json.dumps(run_fixed_benchmark(**kwargs), indent=2))
     else:
         print(json.dumps(service.corpus_summary(), indent=2))
 

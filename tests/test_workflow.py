@@ -29,7 +29,10 @@ def test_workflow_calls_calculator_only_on_retrieved_percentages(tmp_path):
     assert result.tool_results[0]["mean"] == 16
     assert "16%" in result.answer
     assert result.citations[0]["location"] == "p. 1, Results"
+    assert result.citations[0]["chunk_id"] == result.verified_claims[0]["evidence_id"]
+    assert result.verified_claims[0]["evidence_label"] == "Strong"
     assert any("Calculator used" in action for action in result.trace)
+    assert any("Verified" in action for action in result.trace)
 
 
 def test_workflow_returns_insufficient_evidence_after_one_retry(tmp_path):
